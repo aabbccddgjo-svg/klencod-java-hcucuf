@@ -1,7 +1,6 @@
 package com.jfjfigiggi.iufcu;
 
 import android.app.Activity;
-import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
@@ -13,40 +12,26 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import rikka.shizuku.Shizuku;
-
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.lang.reflect.Method;
 
 public class MainActivity extends Activity {
 
-    private static final int SHIZUKU_CODE = 1001;
     private TextView statusTextView;
-
-    // مستمع لنتيجة طلب إذن Shizuku
-    private final Shizuku.OnRequestPermissionResultListener onRequestPermissionResultListener = 
-            this::onRequestPermissionResult;
-
-    // مستمع لاستلام اتصال Binder الخاص بـ Shizuku
-    private final Shizuku.OnBinderReceivedListener onBinderReceivedListener = 
-            this::checkShizukuPermission;
-
-    // مستمع لانقطاع الاتصال بـ Shizuku
-    private final Shizuku.OnBinderDeadListener onBinderDeadListener = 
-            this::checkShizukuPermission;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // إنشاء الواجهة الأساسية برمجياً
+        // إنشاء الواجهة
         ScrollView scrollView = new ScrollView(this);
         LinearLayout mainLayout = new LinearLayout(this);
         mainLayout.setOrientation(LinearLayout.VERTICAL);
         mainLayout.setPadding(40, 40, 40, 40);
         mainLayout.setGravity(Gravity.CENTER_HORIZONTAL);
 
-        // عنوان التطبيق
+        // العنوان
         TextView titleTextView = new TextView(this);
         titleTextView.setText("لوحة التحكم بالجهاز (Shizuku)");
         titleTextView.setTextSize(22);
@@ -55,19 +40,23 @@ public class MainActivity extends Activity {
         titleTextView.setPadding(0, 0, 0, 30);
         mainLayout.addView(titleTextView);
 
-        // نص إظهار حالة وصول إذن Shizuku
+        // حالة إذن Shizuku
         statusTextView = new TextView(this);
         statusTextView.setTextSize(16);
         statusTextView.setPadding(30, 30, 30, 30);
         statusTextView.setGravity(Gravity.CENTER);
         mainLayout.addView(statusTextView);
 
-        // زر طلب الصلاحية
+        // زر طلب الإذن
         Button requestPermissionBtn = createStyledButton("طلب إذن Shizuku", Color.parseColor("#1E88E5"));
-        requestPermissionBtn.setOnClickListener(v -> requestShizukuPermission());
+        requestPermissionBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                requestShizukuPermission();
+            }
+        });
         mainLayout.addView(requestPermissionBtn);
 
-        // خط فاصل
         addSeparator(mainLayout);
 
         // خيارات إدارة الجهاز
@@ -86,73 +75,53 @@ public class MainActivity extends Activity {
         scrollView.setBackgroundColor(Color.parseColor("#121212"));
         setContentView(scrollView);
 
-        // تسجيل المستمعين لإعادة فحص الحالة تلقائياً
-        Shizuku.addBinderReceivedListenerSticky(onBinderReceivedListener);
-        Shizuku.addBinderDeadListener(onBinderDeadListener);
-        Shizuku.addRequestPermissionResultListener(onRequestPermissionResultListener);
-
         checkShizukuPermission();
     }
 
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        // تنظيف المستمعين عند إغلاق التطبيق
-        Shizuku.removeBinderReceivedListener(onBinderReceivedListener);
-        Shizuku.removeBinderDeadListener(onBinderDeadListener);
-        Shizuku.removeRequestPermissionResultListener(onRequestPermissionResultListener);
-    }
-
-    // دالة التحقق من حالة إذن وصول Shizuku
+    // فحص حالة الإذن والتأكد من تشغيل الخدمة
     private void checkShizukuPermission() {
-        if (!Shizuku.pingBinder()) {
-            updateStatus("تطبيق Shizuku غير متصل!", Color.parseColor("#E53935"));
-            return;
-        }
-
-        if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
-            updateStatus("حالة الوصول: تم منح الإذن بنجاح ✔️", Color.parseColor("#4CAF50"));
-        } else {
-            updateStatus("حالة الوصول: الإذن غير ممنوح ❌", Color.parseColor("#FB8C00"));
-        }
-    }
-
-    // دالة طلب إذن Shizuku
-    private void requestShizukuPermission() {
-        if (!Shizuku.pingBinder()) {
-            Toast.makeText(this, "تأكد من تشغيل خدمة Shizuku أولاً", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
-            Toast.makeText(this, "الإذن ممنوح بالفعل", Toast.LENGTH_SHORT).show();
-        } else {
-            Shizuku.requestPermission(SHIZUKU_CODE);
-        }
-    }
-
-    // استقبال نتيجة إذن Shizuku
-    private void onRequestPermissionResult(int requestCode, int grantResult) {
-        if (requestCode == SHIZUKU_CODE) {
-            if (grantResult == PackageManager.PERMISSION_GRANTED) {
-                updateStatus("حالة الوصول: تم منح الإذن بنجاح ✔️", Color.parseColor("#4CAF50"));
-                Toast.makeText(this, "تم قبول الإذن!", Toast.LENGTH_SHORT).show();
-            } else {
-                updateStatus("حالة الوصول: تم رفض الإذن ❌", Color.parseColor("#E53935"));
-                Toast.makeText(this, "تم رفض الإذن!", Toast.LENGTH_SHORT).show();
-            }
-        }
-    }
-
-    // تنفيذ أوامر Shell باستخدام Shizuku
-    private void executeShellCommand(String command) {
-        if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
-            Toast.makeText(this, "يرجى إعطاء إذن Shizuku أولاً!", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
         try {
-            Process process = Shizuku.newProcess(new String[]{"sh", "-c", command}, null, null);
+            Class<?> shizukuClass = Class.forName("rikka.shizuku.Shizuku");
+            Method pingMethod = shizukuClass.getMethod("pingBinder");
+            boolean isAlive = (boolean) pingMethod.invoke(null);
+
+            if (!isAlive) {
+                updateStatus("خدمة Shizuku غير شغالة!", Color.parseColor("#E53935"));
+                return;
+            }
+
+            Method checkPermMethod = shizukuClass.getMethod("checkSelfPermission");
+            int result = (int) checkPermMethod.invoke(null);
+
+            if (result == 0) { // PERMISSION_GRANTED
+                updateStatus("حالة الوصول: تم منح الإذن بنجاح ✔️", Color.parseColor("#4CAF50"));
+            } else {
+                updateStatus("حالة الوصول: الإذن غير ممنوح ❌", Color.parseColor("#FB8C00"));
+            }
+        } catch (Exception e) {
+            updateStatus("لم يتم العثور على مكتبة Shizuku!", Color.parseColor("#E53935"));
+        }
+    }
+
+    // طلب الإذن
+    private void requestShizukuPermission() {
+        try {
+            Class<?> shizukuClass = Class.forName("rikka.shizuku.Shizuku");
+            Method requestMethod = shizukuClass.getMethod("requestPermission", int.class);
+            requestMethod.invoke(null, 1001);
+        } catch (Exception e) {
+            Toast.makeText(this, "خطأ أثناء طلب الإذن: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    // تنفيذ أمر Shell باستخدام Shizuku
+    private void executeShellCommand(String command) {
+        try {
+            Class<?> shizukuClass = Class.forName("rikka.shizuku.Shizuku");
+            Method newProcessMethod = shizukuClass.getMethod("newProcess", String[].class, String[].class, String.class);
+            
+            Process process = (Process) newProcessMethod.invoke(null, new String[]{"sh", "-c", command}, null, null);
+            
             BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
             StringBuilder output = new StringBuilder();
             String line;
@@ -163,31 +132,35 @@ public class MainActivity extends Activity {
             process.waitFor();
             Toast.makeText(this, "تم تنفيذ الأمر بنجاح", Toast.LENGTH_SHORT).show();
         } catch (Exception e) {
-            e.printStackTrace();
-            Toast.makeText(this, "خطأ: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "فشل التنفيذ (تأكد من إعطاء الإذن): " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
     }
 
-    // تحديث مظهر نص الحالة
     private void updateStatus(String text, int color) {
-        runOnUiThread(() -> {
-            statusTextView.setText(text);
-            GradientDrawable drawable = new GradientDrawable();
-            drawable.setColor(color);
-            drawable.setCornerRadius(15);
-            statusTextView.setBackground(drawable);
-            statusTextView.setTextColor(Color.WHITE);
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                statusTextView.setText(text);
+                GradientDrawable drawable = new GradientDrawable();
+                drawable.setColor(color);
+                drawable.setCornerRadius(15);
+                statusTextView.setBackground(drawable);
+                statusTextView.setTextColor(Color.WHITE);
+            }
         });
     }
 
-    // إنشاء أزرار الخيارات والعمليات
-    private Button createActionButton(String title, String command) {
+    private Button createActionButton(final String title, final String command) {
         Button button = createStyledButton(title, Color.parseColor("#2C2C2C"));
-        button.setOnClickListener(v -> executeShellCommand(command));
+        button.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                executeShellCommand(command);
+            }
+        });
         return button;
     }
 
-    // تصميم وتنسيق الأزرار
     private Button createStyledButton(String text, int bgColor) {
         Button button = new Button(this);
         button.setText(text);
@@ -208,7 +181,6 @@ public class MainActivity extends Activity {
         return button;
     }
 
-    // إضافة خط فاصل جمالي بين الأقسام
     private void addSeparator(LinearLayout layout) {
         View separator = new View(this);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
