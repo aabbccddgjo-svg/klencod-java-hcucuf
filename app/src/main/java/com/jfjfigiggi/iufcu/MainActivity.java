@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.view.Gravity;
@@ -21,20 +22,18 @@ import java.lang.reflect.Method;
 public class MainActivity extends Activity {
 
     private TextView statusTextView;
-    private boolean isShizukuReady = false;
+    private boolean isShizukuRunning = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // إنشاء الواجهة
         ScrollView scrollView = new ScrollView(this);
         LinearLayout mainLayout = new LinearLayout(this);
         mainLayout.setOrientation(LinearLayout.VERTICAL);
         mainLayout.setPadding(40, 40, 40, 40);
         mainLayout.setGravity(Gravity.CENTER_HORIZONTAL);
 
-        // العنوان
         TextView titleTextView = new TextView(this);
         titleTextView.setText("لوحة التحكم بالجهاز (Shizuku)");
         titleTextView.setTextSize(22);
@@ -43,19 +42,17 @@ public class MainActivity extends Activity {
         titleTextView.setPadding(0, 0, 0, 30);
         mainLayout.addView(titleTextView);
 
-        // نص حالة Shizuku
         statusTextView = new TextView(this);
         statusTextView.setTextSize(16);
         statusTextView.setPadding(30, 30, 30, 30);
         statusTextView.setGravity(Gravity.CENTER);
         mainLayout.addView(statusTextView);
 
-        // زر فتح Shizuku
-        Button requestPermissionBtn = createStyledButton("فتح Shizuku لمنح الإذن / التفعيل", Color.parseColor("#1E88E5"));
+        Button requestPermissionBtn = createStyledButton("إعادة فحص حالة Shizuku", Color.parseColor("#1E88E5"));
         requestPermissionBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                openShizukuApp();
+                checkShizukuState();
             }
         });
         mainLayout.addView(requestPermissionBtn);
@@ -78,51 +75,60 @@ public class MainActivity extends Activity {
         scrollView.setBackgroundColor(Color.parseColor("#121212"));
         setContentView(scrollView);
 
-        checkShizukuService();
+        checkShizukuState();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        checkShizukuService();
+        checkShizukuState();
     }
 
-    private void checkShizukuService() {
+    // التحقق المباشر من Shizuku Provider
+    private void checkShizukuState() {
         try {
-            Class<?> serviceManager = Class.forName("android.os.ServiceManager");
-            Method getService = serviceManager.getMethod("getService", String.class);
-            IBinder binder = (IBinder) getService.invoke(null, "moe.shizuku.server.IShizukuService");
+            // الاستعلام من Shizuku Content Provider
+            Bundle reply = getContentResolver().call(
+                    Uri.parse("content://moe.shizuku.privilege.binder"),
+                    "sendBinder",
+                    null,
+                    null
+            );
 
-            if (binder != null && binder.isBinderAlive()) {
-                isShizukuReady = true;
-                updateStatus("حالة الوصول: خدمة Shizuku مفعّلة وجاهزة ✔️", Color.parseColor("#4CAF50"));
+            if (reply != null) {
+                isShizukuRunning = true;
+                updateStatus("حالة الوصول: Shizuku مفعّل ومتصل بنجاح ✔️", Color.parseColor("#4CAF50"));
             } else {
-                isShizukuReady = false;
-                updateStatus("خدمة Shizuku غير مفعّلة في الهاتف! ❌", Color.parseColor("#E53935"));
+                checkServiceBinderFallback();
             }
         } catch (Exception e) {
-            isShizukuReady = false;
-            updateStatus("لم يتم العثور على خدمة Shizuku! ❌", Color.parseColor("#E53935"));
+            checkServiceBinderFallback();
         }
     }
 
-    private void openShizukuApp() {
+    // طريقة فحص احتياطية من خلال Binder
+    private void checkServiceBinderFallback() {
         try {
-            Intent intent = getPackageManager().getLaunchIntentForPackage("rikka.shizuku");
-            if (intent != null) {
-                startActivity(intent);
+            Class<?> serviceManager = Class.forName("android.os.ServiceManager");
+            Method getService = serviceManager.getMethod("getService", String.class);
+            IBinder binder = (IBinder) getService.invoke(null, "shizuku");
+
+            if (binder != null && binder.isBinderAlive()) {
+                isShizukuRunning = true;
+                updateStatus("حالة الوصول: Shizuku مفعّل وجاهز ✔️", Color.parseColor("#4CAF50"));
             } else {
-                Toast.makeText(this, "تطبيق Shizuku غير مثبت على هذا الهاتف!", Toast.LENGTH_LONG).show();
+                isShizukuRunning = false;
+                updateStatus("تأكد من تشغيل (Start) خدمة Shizuku داخل التطبيق! ❌", Color.parseColor("#E53935"));
             }
         } catch (Exception e) {
-            Toast.makeText(this, "خطأ أثناء فتح Shizuku: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            isShizukuRunning = false;
+            updateStatus("خدمة Shizuku غير مفعّلة حالياً! ❌", Color.parseColor("#E53935"));
         }
     }
 
     private void executeShellCommand(String command) {
-        if (!isShizukuReady) {
-            Toast.makeText(this, "يرجى تشغيل خدمة Shizuku أولاً!", Toast.LENGTH_LONG).show();
-            openShizukuApp();
+        if (!isShizukuRunning) {
+            Toast.makeText(this, "قم بتشغيل Shizuku أولاً عبر ADB أو Wireless Debugging!", Toast.LENGTH_LONG).show();
             return;
         }
 
@@ -138,7 +144,7 @@ public class MainActivity extends Activity {
 
             Toast.makeText(this, "تم تنفيذ الأمر بنجاح!", Toast.LENGTH_SHORT).show();
         } catch (Exception e) {
-            Toast.makeText(this, "حدث خطأ: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "حدث خطأ أثناء التنفيذ: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
     }
 
