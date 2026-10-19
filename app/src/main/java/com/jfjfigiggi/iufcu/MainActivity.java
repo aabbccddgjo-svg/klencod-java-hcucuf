@@ -27,7 +27,7 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // إنشاء الواجهة الأساسية برمجياً
+        // إنشاء الواجهة
         ScrollView scrollView = new ScrollView(this);
         LinearLayout mainLayout = new LinearLayout(this);
         mainLayout.setOrientation(LinearLayout.VERTICAL);
@@ -43,14 +43,14 @@ public class MainActivity extends Activity {
         titleTextView.setPadding(0, 0, 0, 30);
         mainLayout.addView(titleTextView);
 
-        // حالة إذن Shizuku
+        // نص حالة Shizuku
         statusTextView = new TextView(this);
         statusTextView.setTextSize(16);
         statusTextView.setPadding(30, 30, 30, 30);
         statusTextView.setGravity(Gravity.CENTER);
         mainLayout.addView(statusTextView);
 
-        // زر التحقق وفتح تطبيق Shizuku
+        // زر فتح Shizuku
         Button requestPermissionBtn = createStyledButton("فتح Shizuku لمنح الإذن / التفعيل", Color.parseColor("#1E88E5"));
         requestPermissionBtn.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -87,7 +87,6 @@ public class MainActivity extends Activity {
         checkShizukuService();
     }
 
-    // الفحص الحقيقي لخدمة Shizuku عبر ServiceManager الخاص بالنظام
     private void checkShizukuService() {
         try {
             Class<?> serviceManager = Class.forName("android.os.ServiceManager");
@@ -107,7 +106,6 @@ public class MainActivity extends Activity {
         }
     }
 
-    // فتح تطبيق Shizuku للمستخدم لإعطاء الصلاحية أو تشغيل الخدمة
     private void openShizukuApp() {
         try {
             Intent intent = getPackageManager().getLaunchIntentForPackage("rikka.shizuku");
@@ -121,7 +119,6 @@ public class MainActivity extends Activity {
         }
     }
 
-    // تنفيذ أوامر النظام
     private void executeShellCommand(String command) {
         if (!isShizukuReady) {
             Toast.makeText(this, "يرجى تشغيل خدمة Shizuku أولاً!", Toast.LENGTH_LONG).show();
@@ -130,7 +127,6 @@ public class MainActivity extends Activity {
         }
 
         try {
-            // تنفيذ عبر الـ Shell بطلب امتيازات الخدمة المفتوحة
             Process process = Runtime.getRuntime().exec(new String[]{"sh", "-c", command});
             BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
             StringBuilder output = new StringBuilder();
@@ -165,4 +161,41 @@ public class MainActivity extends Activity {
         button.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                executeShellCommand(command
+                executeShellCommand(command);
+            }
+        });
+        return button;
+    }
+
+    private Button createStyledButton(String text, int bgColor) {
+        Button button = new Button(this);
+        button.setText(text);
+        button.setTextColor(Color.WHITE);
+
+        GradientDrawable shape = new GradientDrawable();
+        shape.setCornerRadius(20);
+        shape.setColor(bgColor);
+        button.setBackground(shape);
+
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        params.setMargins(0, 15, 0, 15);
+        button.setLayoutParams(params);
+
+        return button;
+    }
+
+    private void addSeparator(LinearLayout layout) {
+        View separator = new View(this);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                2
+        );
+        params.setMargins(0, 30, 0, 30);
+        separator.setLayoutParams(params);
+        separator.setBackgroundColor(Color.GRAY);
+        layout.addView(separator);
+    }
+}
