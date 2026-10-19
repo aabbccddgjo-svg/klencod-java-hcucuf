@@ -14,7 +14,6 @@ import android.widget.Toast;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
-import java.lang.reflect.Method;
 
 public class MainActivity extends Activity {
 
@@ -24,7 +23,7 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // إنشاء الواجهة
+        // إنشاء الواجهة الأساسية
         ScrollView scrollView = new ScrollView(this);
         LinearLayout mainLayout = new LinearLayout(this);
         mainLayout.setOrientation(LinearLayout.VERTICAL);
@@ -40,26 +39,26 @@ public class MainActivity extends Activity {
         titleTextView.setPadding(0, 0, 0, 30);
         mainLayout.addView(titleTextView);
 
-        // حالة إذن Shizuku
+        // نص حالة إذن Shizuku
         statusTextView = new TextView(this);
         statusTextView.setTextSize(16);
         statusTextView.setPadding(30, 30, 30, 30);
         statusTextView.setGravity(Gravity.CENTER);
         mainLayout.addView(statusTextView);
 
-        // زر طلب الإذن
-        Button requestPermissionBtn = createStyledButton("طلب إذن Shizuku", Color.parseColor("#1E88E5"));
+        // زر التحقق والطلب
+        Button requestPermissionBtn = createStyledButton("فحص وطلب إذن SHIZUKU", Color.parseColor("#1E88E5"));
         requestPermissionBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                requestShizukuPermission();
+                checkAndRequestShizuku();
             }
         });
         mainLayout.addView(requestPermissionBtn);
 
         addSeparator(mainLayout);
 
-        // خيارات إدارة الجهاز
+        // أزرار التحكم بالجهاز
         mainLayout.addView(createActionButton("تشغيل Wi-Fi", "svc wifi enable"));
         mainLayout.addView(createActionButton("إيقاف Wi-Fi", "svc wifi disable"));
         mainLayout.addView(createActionButton("تشغيل البلوتوث", "svc bluetooth enable"));
@@ -75,68 +74,57 @@ public class MainActivity extends Activity {
         scrollView.setBackgroundColor(Color.parseColor("#121212"));
         setContentView(scrollView);
 
-        checkShizukuPermission();
+        // التحقق عند الفتح
+        checkAndRequestShizuku();
     }
 
-    // فحص حالة الإذن والتأكد من تشغيل الخدمة
-    private void checkShizukuPermission() {
-        try {
-            Class<?> shizukuClass = Class.forName("rikka.shizuku.Shizuku");
-            Method pingMethod = shizukuClass.getMethod("pingBinder");
-            boolean isAlive = (boolean) pingMethod.invoke(null);
-
-            if (!isAlive) {
-                updateStatus("خدمة Shizuku غير شغالة!", Color.parseColor("#E53935"));
-                return;
-            }
-
-            Method checkPermMethod = shizukuClass.getMethod("checkSelfPermission");
-            int result = (int) checkPermMethod.invoke(null);
-
-            if (result == 0) { // PERMISSION_GRANTED
-                updateStatus("حالة الوصول: تم منح الإذن بنجاح ✔️", Color.parseColor("#4CAF50"));
+    // الفحص عبر أوامر النظام المباشرة لخدمة Shizuku
+    private void checkAndRequestShizuku() {
+        String result = runCommand("rish -c 'id' || su -c 'id'");
+        if (result.contains("uid=0") || result.contains("context=")) {
+            updateStatus("حالة الوصول: تم منح الإذن بنجاح ✔️", Color.parseColor("#4CAF50"));
+        } else {
+            // محاولة إرسال طلب الوصول عبر rikkagroup shizuku CLI
+            String reqResult = runCommand("am start -n rikka.shizuku/rikka.shizuku.MainActivity");
+            if (reqResult.contains("Error")) {
+                updateStatus("خدمة Shizuku غير مفعّلة في الهاتف!", Color.parseColor("#E53935"));
             } else {
-                updateStatus("حالة الوصول: الإذن غير ممنوح ❌", Color.parseColor("#FB8C00"));
+                updateStatus("يرجى منح الإذن من تطبيق Shizuku ❌", Color.parseColor("#FB8C00"));
             }
-        } catch (Exception e) {
-            updateStatus("لم يتم العثور على مكتبة Shizuku!", Color.parseColor("#E53935"));
         }
     }
 
-    // طلب الإذن
-    private void requestShizukuPermission() {
-        try {
-            Class<?> shizukuClass = Class.forName("rikka.shizuku.Shizuku");
-            Method requestMethod = shizukuClass.getMethod("requestPermission", int.class);
-            requestMethod.invoke(null, 1001);
-        } catch (Exception e) {
-            Toast.makeText(this, "خطأ أثناء طلب الإذن: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-        }
-    }
-
-    // تنفيذ أمر Shell باستخدام Shizuku
+    // دالة تنفيذ أوامر Shell عبر Shizuku/rish
     private void executeShellCommand(String command) {
+        // تنفيذ الأمر باستخدام بيئة rish الخاصة بـ Shizuku
+        String fullCommand = "rish -c '" + command + "'";
+        String output = runCommand(fullCommand);
+
+        if (output.startsWith("ERROR")) {
+            Toast.makeText(this, "فشل التنفيذ! تأكد من تشغيل Shizuku وإعطاء الإذن.", Toast.LENGTH_LONG).show();
+        } else {
+            Toast.makeText(this, "تم تنفيذ الأمر بنجاح", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    // دالة مساعدة لتشغيل أوامر Shell
+    private String runCommand(String cmd) {
         try {
-            Class<?> shizukuClass = Class.forName("rikka.shizuku.Shizuku");
-            Method newProcessMethod = shizukuClass.getMethod("newProcess", String[].class, String[].class, String.class);
-            
-            Process process = (Process) newProcessMethod.invoke(null, new String[]{"sh", "-c", command}, null, null);
-            
+            Process process = Runtime.getRuntime().exec(new String[]{"sh", "-c", cmd});
             BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-            StringBuilder output = new StringBuilder();
+            StringBuilder sb = new StringBuilder();
             String line;
             while ((line = reader.readLine()) != null) {
-                output.append(line).append("\n");
+                sb.append(line).append("\n");
             }
-
             process.waitFor();
-            Toast.makeText(this, "تم تنفيذ الأمر بنجاح", Toast.LENGTH_SHORT).show();
+            return sb.toString();
         } catch (Exception e) {
-            Toast.makeText(this, "فشل التنفيذ (تأكد من إعطاء الإذن): " + e.getMessage(), Toast.LENGTH_LONG).show();
+            return "ERROR: " + e.getMessage();
         }
     }
 
-    private void updateStatus(String text, int color) {
+    private void updateStatus(final String text, final int color) {
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
